@@ -134,15 +134,21 @@ zscore_norm <- function(x) {
 ```
 
 
+Disclaimer: This is a working draft, i.e., research in progress and is such, published to elicit comments/advice/recommendations and to encourage debate. The views expressed in this article are solely mine.
 
+Summary: In this note, I demonstrate how to conduct Bootstrapped Data Envelopment Analysis (DEA) and generate distributions of efficiency scores. I examine expenditures in health and education and cross-country variation in human capital and find large potential efficiency gains for developing countries.
 
-
-*Summary*: 
-
+However, I show how efficiency scores for developing countries can be more sensitive to the composition of the sample data, as differences in the efficiency score depend on the relative cohort of peer countries. Moreover, given the peculiarities of the DEA linear programming technique, the distribution of Bootstrapped efficiency scores is not always unimodal. For example, Madagascar has a bimodal distribution, with efficiency scores ranging from around 0.75 to 0.90. Similarly, Sri Lanka has a unique trimodal distribution with increasing wavelength and diminishing amplitude.
 
 # Introduction
 
+DEA is a non-parametric method used in operations research and economics to assess the efficiency of various decision-making units (DMUs), such as hospitals, schools, or businesses, without an explicit input-output model (hence non-parametric). Originally proposed by Charnes, Cooper, and Rhodes (1978), DEA evaluates the relative efficiency of these “DMUs” by constructing a piecewise frontier (imagine drawing connecting dots with lines) over the data points to identify those that are most efficient. These efficient units operate on the ‘efficient frontier’ and set a benchmark for other units.
 
+Although the non-parametric DEA approach is relatively popular in the economics/operational efficiency analysis literature, one disadvantage is its deterministic nature. In this regard, the focus of this analysis is limited in scope, and the aim is to demonstrate the Bootstrapped procedure for DEA. By repeatedly sampling from the observed data and recalculating DEA scores, Bootstrapped simulations can generate a distribution of efficiency scores, highlighting variations and potential data sensitivity. This analysis was inspired by Kittelsen (1999), who applied Bootstrapped simulations to DEA efficiency scores and analyzed its statistical properties.
+
+I apply Bootstrapped DEA to health and education expenditures in this note. Efficient public health and education expenditures are macro-critical in the current constrained fiscal environment characterized by high debt levels and interest rates. These expenditures are major components of economic development policy and essential investments in human capital that drive long-term growth and resiliency. DEA offers a methodological framework to evaluate countries’ relative efficiency in converting health and education expenditures (inputs) into human capital outcomes (outputs). In theory, benchmarking countries against the most efficient performers can highlight potential areas for improvement, and the exercise can act as a jumping-off point for further engagement. However, as the distributional analysis of the Bootstrapped DEA scores shows, the method must be used cautiously and with care.
+
+The note is structured as follows: Section I discusses the World Bank data source and presents exploratory data analysis. Section II briefly describes the DEA methodology, Principal Components Analysis (PCA) used in dimensionality reduction, and the Bootstrapped resampling procedure. Finally, Section III analyzes the distribution of efficiency scores and how this can improve the understanding of the technique.
 
 \newpage
 
@@ -257,7 +263,7 @@ wb_viz %>% group_by(income) %>% dplyr::summarise(mean=mean(pr_hea_exp_p1, na.rm 
 wb_viz %>% group_by(income) %>% dplyr::summarise(mean=mean(ex_hea_exp_p1, na.rm = TRUE))
 ```
 
-Fig. X shows the distribution of health and education expenditure per capita in 2017 USD PPP. On average, AEs spend close to 16 times more on a PPP per capita basis for education when compared to LIDCs, and close to 3 times more when compared to EMEs. The difference in domestic government spending in health is even higher. On average, AEs spend about 3740 USD per capita, EMEs about 764 USD per capita, and LIDCs about 84 USD per capita. In contrast, external health expenditures per capita are higher on average in LIDCs, than in AEs, given the grants and aid provided to poorer countries.
+Fig. 1 shows the distribution of health and education expenditure per capita in 2017 USD PPP. On average, AEs spend close to 16 times more on a PPP per capita basis for education when compared to LIDCs and close to 3 times more when compared to EMEs. The difference in domestic government spending on health is even higher. On average, AEs spend about 3740 USD per capita, EMEs about 764 USD per capita, and LIDCs about 84 USD per capita. In contrast, external health expenditures per capita are higher on average in LIDCs than in AEs, given the grants and aid provided to poorer countries.
 
 ```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
 # Boxplot
@@ -280,15 +286,13 @@ per capita,(2017 USD PPP)", "Income Group")
                             tag_sep = '.', tag_suffix = ':',
   theme = theme(plot.title = element_text(size = 12), legend.position="bottom",
                 plot.caption = element_text(size = 9.5))))
-ggsave("./fig01.png", height = 18, width = 25, units = "cm")
+# ggsave("./fig01.png", height = 18, width = 25, units = "cm")
 remove(temp1, temp2, temp3, temp4)
 ```
 
-Next, let's look at scatter plots of human capital variables. Fig. XX shows expenditures in education and health (x-axis) plotted against the Human Capital Index (y-axis). It's clear that the largest improvements to the Human Capital Index, occur within the first $2000 per capita expenditure in health and education. As expenditures increase further, marginal returns to Human Capital tend to diminish.
-
-From an input-output perspective, an illustrative efficiency frontier can be observed for countries that have higher levels of human capital among peers with similar levels of spending. For example, in Fig. a, Singapore achieves a higher level of human capital than Norway with close to 90% more expenditures. Of course, this observation should be taken as illustrative.
-
-As a side note, Fig. d does not show the convex positive relationship between spending and human capital, as the spending item is solely comprised of externally financed health spending. Given external financing, such as development aid, is largely meant for developing countries, I should expect to see a negative relationship.
+Next, let’s look at scatter plots of human capital variables. Fig. 2 shows expenditures in education and health (x-axis) plotted against the Human Capital Index (y-axis). It’s clear that the most considerable improvements to the Human Capital Index, occur within the first $2000 per capita expenditure in health and education. As expenditures increase further, marginal returns to Human Capital tend to diminish.
+From a single input-single output scenario, an illustrative efficiency frontier can be observed for countries with higher levels of human capital among peers with similar spending levels. For example, in Fig. 2A, Singapore achieves a higher level of human capital than Norway, with nearly 90% more expenditure overall.
+As a side note, Fig. 2D does not show the convex positive relationship between spending and human capital, as the spending item is solely comprised of externally financed health spending. Given external financing, such as development aid, is largely meant for developing countries, I should expect to see a negative relationship.
 
 ```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
 # Scatter: 
@@ -313,55 +317,42 @@ per capita, (2017 USD PPP)", "")
   tag_levels =  c('A'), tag_sep = '.', tag_suffix = ':',
   theme = theme(plot.title = element_text(size = 12), legend.position="bottom",
                 plot.caption = element_text(size = 9.5))))
-ggsave("./fig02.png", height = 18, width = 25, units = "cm")
+# ggsave("./fig02.png", height = 18, width = 25, units = "cm")
 remove(temp1, temp2, temp3, temp4)
 ```
 
 
-Overall, the brief data exploration reaffirms the obvious. Unsurprisingly, variables capturing education outcomes are positively correlated with spending, while spending is correlated with level of development. 
-
-Outcome indicators tend to be less favourable in EMEs and LIDCs. However, it also seems that there are countries spending similar levels with different outcomes - evidence of differences in efficiency.
-
-One important conclusion from the data exploration is the choice of metrics for education outcomes. 
-
+Overall, the brief data exploration reaffirms the obvious. The variables capturing education outcomes are positively correlated with spending, while spending is correlated with the level of development. Outcome indicators tend to be less favorable in EMEs and LIDCs. However, countries with similar spending levels have different outcomes — evidence of differences in efficiency. To further explore the cross-country variations in efficiency, I now discuss DEA and Bootstrapped simulations.
 
 
 \newpage
 
 
-# Section II: Monte Carlo simulations of DEA efficiency scores
-
-DATA GENERATING PROCESS
+# Section II: Bootstrapped simulations of DEA efficiency scores
 
 
+## Data Envelopment Analysis
 
-## Brief overview of Data Envelopment Analysis (DEA), bootstrapping, and Principal Components Analysis (PCA)
-
-
-The model specification for this analysis is variable returns to scale (VRS), and 
+While DEA offers substantial benefits in efficiency analysis, its assumptions and potential limitations must be considered. Here, I provide an overview of DEA features, including advantages and disadvantages.
 
 
-A statistical framework requires an axiomatic approach to a statistical model including a specification of a sampling procedure sometimes denoted a Data Generating Process (DGP). A given set of data is regarded as a sample from a large population and a set of efficiency scores is considered one out of many possible outcomes.
+1. **Non-Parametric Approach**: DEA does not assume a specific functional form between inputs and outputs, making it versatile and widely applicable.
+2. **Incorporation of Multiple Inputs and Outputs**: DEA can handle multiple inputs and outputs simultaneously, assessing efficiency in complex scenarios where multiple factors can influence performance. In cases with too many variables (a rule of thumb is around 3–4 per input and output), dimensionality reduction techniques such as Principal Component Analysis or Single Vector Decomposition are recommended.
+3. **Sensitivity to Extreme Values**: DEA can be sensitive to outliers or extreme values, as these can significantly influence the shape of the efficiency frontier.
+4. **Assumption of Homogeneity**: DEA assumes that DMUs are attempting to function in similar environments and with similar goals, which may not hold across different countries with diverse socio-economic contexts.
+5. **Data Quality and Availability**: The accuracy of DEA results is highly dependent on the quality and completeness of input and output data. Incomplete data can skew efficiency scores.
+6. **Subjectivity in Variable Selection**: The choice of inputs and outputs can subjectively affect the DEA results, and different selections can lead to different efficiency classifications.
 
+Two major characteristics that can be assessed using Bootstrapped simulation are the impact of data availability and sensitivity to extreme values on DEA scores.
 
-### Advantages of Using DEA with Monte Carlo Simulations
+## Brief overview of the Bootstrapped data selection process
 
-1. **Non-Parametric Approach**: DEA does not assume a specific functional form between inputs and outputs, making it versatile and widely applicable across different types of data and sectors.
-2. **Comparative Analysis**: It allows for the direct comparison of multiple entities based on multiple inputs and outputs, making it ideal for cross-country comparisons in public health and education.
-3. **Incorporation of Multiple Inputs and Outputs**: DEA can handle multiple inputs and outputs simultaneously, assessing efficiency in complex scenarios where multiple factors influence performance.
-4. **Uncertainty Analysis**: By integrating Monte Carlo simulations, the method quantifies uncertainty in efficiency scores, providing a deeper insight into the reliability of the results and identifying countries with higher variability in performance.
+Bootstrapped simulations can contextualize DEA by making explicit the method’s inherent disadvantages around data availability and sensitivity to extreme values. Moreover, simulations can provide deeper insight into the reliability of the results by identifying countries with higher variance in the efficiency scores and quantifying the uncertainty.
+My analysis uses a simple sampling procedure for the Data Selection Process (DSP). A given data set is regarded as a sample from a large population, and a set of efficiency scores based on the sample is considered one of many possible outcomes. I randomly select a sample from the observed data by conducting Bernoulli trials with a specific probability.
+The table below provides an example of the DSP in Excel. Using a Bernoulli probability function, each country is randomly assigned a value of 1 or 0, where a value of 0 means I exclude the data point. For example, to randomly select 70% of the observed country data, I run Bernoulli trials with a probability of 70% for each country observation.
+After randomly selecting 70% of the dataset, I run the DEA, store the efficiency score results, and then repeat with another randomly selected 70% of the dataset.
 
-### Disadvantages and Assumptions
-
-1. **Sensitivity to Extreme Values**: DEA can be sensitive to outliers or extreme values, as these can significantly influence the shape of the efficiency frontier.
-2. **Static Nature**: Traditional DEA models are static and do not easily track changes over time unless time-series data are specifically incorporated.
-3. **Assumption of Homogeneity**: DEA assumes that DMUs are attempting to function in similar environments and with similar goals, which might not always hold true across different countries with diverse socio-economic contexts.
-4. **Data Quality and Availability**: The accuracy of DEA results is highly dependent on the quality and completeness of input and output data. Incomplete data can skew efficiency scores.
-5. **Subjectivity in Variable Selection**: The choice of inputs and outputs can subjectively affect the DEA results, and different selections can lead to different efficiency classifications.
-
-### Conclusion
-
-Integrating Monte Carlo simulations into DEA for analyzing public health and education expenditures enhances the robustness of the efficiency estimates by addressing the inherent uncertainty in any data-driven analysis. This methodological innovation allows policymakers to not only identify performance benchmarks but also understand the reliability of these benchmarks in guiding policy decisions. While DEA offers substantial benefits in operational efficiency analysis, careful consideration must be given to its assumptions and potential limitations to fully leverage its insights.
+The process is repeated for B trials until we have a distribution of efficiency scores for each country. In this analysis, I ran the Bootstrapped DEA for 10,000 trials, with a randomly selected 70% of the data each time.
 
 
 
@@ -369,7 +360,9 @@ Integrating Monte Carlo simulations into DEA for analyzing public health and edu
 
 ## Data Envelopment Analysis Implementation in R
 
-There are numerous packages in R such as lpSolve, Benchmarking, FEAR to do DEA Analysis. In this note, I use the `Benchmarking` package due to the simplicity in use, speed, and accompanying textbook (which I wholeheartedly recommend for those interested in futher reading).
+I use the Benchmarking R package to conduct DEA in R. The package is simple to use, relatively fast, and includes an accompanying textbook (which I wholeheartedly recommend for those interested in further reading). The DEA model specification for my analysis is variable returns to scale (VRS) and output-oriented.
+
+In the pre-processing stage, I Z-normalize all variables. Normalizing is important as PCA directions are highly sensitive to data scaling. The raw variables are measured on different scales, so I want to assign equal importance to all variables. Normalizing is also important for DEA as large absolute magnitudes of variance can be overrepresented. In addition, DEA does not allow for values less than or equal to zero, so I then rescale each variable such that the new output variables are: Processed variable = Absolute value of (variable — max (variable)), where the smallest value is now 0 (which I recode as 0.0001).
 
 The input indicators capture the level of education spending and the level of development:
 - [*gg_edu_exp_p1* - Total Government expenditure on education, per capita (USD PPP)](https://data.worldbank.org/indicator/SE.XPD.TOTL.GD.ZS): defined as the general government expenditure on education (current, capital, and transfers) expressed in USD PPP terms per capita. It includes expenditure funded by transfers from international sources to government. General government usually refers to local, regional and central governments.
@@ -388,6 +381,8 @@ The output indicators are the Health/Education Human Capital Index produced by t
 To tackle issues where variables with large magnitudes of variance can be over-represented in DEA, I Z-score normalize all variables. DEA does not allow for values less than or equal to zero, so I then rescale each variable such that the new output variables are `variable = ABS(variable - max(variable))` where the smallest value is now 0 (which I recode as 0.0001).
 
 Normalising is also important given PCA directions are highly sensitive to data scaling. The raw variables are measured on different scales so I want to assign equal importance to all variables.
+
+Fig 3. depicts the processed data for which we run the DEA. Note that the scatter plot presents the first PCs of the input and output variables.
 
 ```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
 ###############################################################################
@@ -449,7 +444,7 @@ temp_p1a_ve %>%
 remove(temp1, temp2, temp_p1a_ve)
 ```
 
-Using the first PC as the "output" variable, I can plot it against education expenditure. 
+Using the first PC as the "output" variable, I can plot it against expenditure. 
 
 ```{r}
 wb_dea %>%
@@ -463,15 +458,8 @@ wb_dea %>%
       (principal component)", title = "Figure 3", caption = "Source: World bank World Development Indicators, Author's Calculation") +
   imf_theme()
 
-ggsave("./fig03.png", height = 18, width = 25, units = "cm")
+# ggsave("./fig03.png", height = 18, width = 25, units = "cm")
 ```
-
-
-
-
-
-
-
 
 
 ```{r}
@@ -554,31 +542,13 @@ if (dea_run == 1) {
 
 ```
 
+# Section III: distributional analysis of Bootstrapped efficiency scores
 
+## Results & Brief Discussion
 
-
-The below figure shows the average test errors of each model.
-
-```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
-###############################################################################
-# TESTING ERROR #
-###############################################################################
-# dea_result %>%
-#   dplyr::group_by(income) %>%
-#   summarise(mean.ebc_score = mean(ebc_score, na.rm = TRUE),
-#             sd.ebc_score = sd(ebc_score, na.rm = TRUE),
-#             n.ebc_score = n()) %>%
-#   mutate(se.ebc_score = sd.ebc_score / sqrt(n.ebc_score),
-#          ci.ebc_score = qt(1 - (0.1 / 2), n.ebc_score - 1) * se.ebc_score) %>%
-#   ggplot(aes(x=mean.ebc_score, y=reorder(income, mean.ebc_score))) + 
-#     geom_bar(position=position_dodge(), stat="identity", fill = "#cb3960") +
-#     geom_errorbar(aes(xmin=mean.ebc_score-ci.ebc_score, xmax=mean.ebc_score+ci.ebc_score),
-#                   width=.5,                    # Width of the error bars
-#                   position=position_dodge(.9))+
-#   labs(x = "DEA Efficiency Score", y = "Income Group", title = paste0("Test Error, Average")) + imf_theme()
-```
-
-
+Fig. 4 below summarizes the main results of the Bootstrapped efficiency estimates. Fig. 4A shows the mean efficiency scores. The AEs tend to have higher efficiency scores, meaning they are better at converting health and education expenditures into human capital outcomes.
+Fig. 4B shows the standard deviation of efficiency scores by country. Specifically, it depicts the standard deviation of country efficiency scores after 10,000 runs. I find that the standard deviation for LIDCs tends to be higher than that of EMEs and AEs on average. The mean standard deviation for LIDCs is 0.218, compared to 0.157 for EMEs and 0.062 for AEs.
+The implications are that the efficiency scores for LIDCs tend to be more sensitive to the composition of the sample data, and differences in the efficiency score depend on the relative cohort of peer countries (DMUs).
 
 ```{r}
 dea_result %>%
@@ -618,7 +588,7 @@ temp1 <- dea_result %>%
   tag_levels =  c('A'), tag_sep = '.', tag_suffix = ':',
   theme = theme(plot.title = element_text(size = 12), legend.position="bottom",
                 plot.caption = element_text(size = 9.5))))
-ggsave("./fig04.png", height = 18, width = 25, units = "cm")
+# ggsave("./fig04.png", height = 18, width = 25, units = "cm")
 remove(temp1, temp2)
 ```
 
@@ -635,187 +605,48 @@ temp4 <- func_hist_dea(dea_result, option = "ebc_score","SGP")
   tag_levels =  c('a'), tag_prefix = 'Fig. ', tag_sep = '.', tag_suffix = ':',
   theme = theme(plot.title = element_text(size = 12), legend.position="bottom",
                 plot.caption = element_text(size = 9.5))))
-# ggsave("./fig02.png", height = 10, width = 25, units = "cm")
+
 remove(temp1, temp2, temp3, temp4)
 ```
 
-
+I also selected example countries to visualize how the sample set affects efficiency scores. In Fig 5 below, I plotted the Bootstrapped efficiency scores for select countries as histograms. Given the peculiarities of the DEA linear programming technique, the distribution of efficiency scores is not always unimodal. For example, the United Kingdom has a trimodal distribution, with efficiency scores ranging from around 0.87 to 0.94.
+The inclusion of certain peers in the sample has a substantial impact on the final efficiency score.
 
 ```{r, fig.width=10,fig.height=5}
 func_hist_dea_2(dea_result, option = "ebc_score",c("USA","NOR","JPN","SGP","GBR","DEU")) +
   labs(caption = 'Source: Author calculation', title = "Figure 5 Distribution of Monte Carlo DEA scores for select Advanced Economies")
-ggsave("./fig05.png", height = 10, width = 25, units = "cm")
-func_hist_dea_2(dea_result, option = "ebc_score",c("BRA","EGY","SWZ","MYS","PHL","LKA")) +
-  labs(caption = 'Source: Author calculation', title = "Figure 6 Distribution of Monte Carlo DEA scores for select Emerging Market Economies")
-ggsave("./fig06.png", height = 10, width = 25, units = "cm")
-func_hist_dea_2(dea_result, option = "ebc_score",c("AFG","BGD","BFA","BDI","GMB","MDG")) +
-  labs(caption = 'Source: Author calculation', title = "Figure 7 Distribution of Monte Carlo DEA scores for select Low Income Economies")
-ggsave("./fig07.png", height = 10, width = 25, units = "cm")
-# remove(temp1, temp2, temp3, temp4)
+# ggsave("./fig05.png", height = 10, width = 25, units = "cm")
 ```
 
+In Fig. 6 I again visualized the distribution of the efficiency scores for select EMEs. Sri Lanka is a good example of a country where efficiency scores can range from 0.75 to 0.95, depending on which countries are included as peers.
 
-ˆ
+```{r, fig.width=10,fig.height=5}
+func_hist_dea_2(dea_result, option = "ebc_score",c("BRA","EGY","SWZ","MYS","PHL","LKA")) +
+  labs(caption = 'Source: Author calculation', title = "Figure 6 Distribution of Monte Carlo DEA scores for select Emerging Market Economies")
+# ggsave("./fig06.png", height = 10, width = 25, units = "cm")
+```
+
+Finally, in Fig. 7 I visualized select LIDCs. While Burundi has a bell-shaped unimodal distribution, other countries like Burkina Faso and Afghanistan have complex multimodal distributions. 
+
+```{r, fig.width=10,fig.height=5}
+func_hist_dea_2(dea_result, option = "ebc_score",c("AFG","BGD","BFA","BDI","GMB","MDG")) +
+  labs(caption = 'Source: Author calculation', title = "Figure 7 Distribution of Monte Carlo DEA scores for select Low Income Economies")
+# ggsave("./fig07.png", height = 10, width = 25, units = "cm")
+```
+
+Similarly, the mean Bootstrapped efficiency score for Madagascar is 0.824, yet, summary statistics would hide the bimodal nature of Madagascar’s data.
+
 ```{r}
 dea_result %>% dplyr::filter(isocode == "MDG") %>% dplyr::summarise(mean = mean(ebc_score))
 ```
 
-## Results & Brief Discussion
-
-
-
-
-Plotted against absolute spending, Fig. 9a shows that in general, higher government spending per student is correlated with higher efficiency. However the relationship is clearly non-linear and depicts diminishing marginal returns to spending. On the other hand, Fig. 9b indicates a weak negative relationship between efficiency and spending as a percentage of GDP per capita.
-
-```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
-# temp1 <- dea_result %>%
-#   ggplot(aes(y = (ebc_score),
-#              x = seceduexp_s1,
-#              color = income)) +
-#   geom_smooth(method = "lm", se=FALSE, colour = "#3d3f42", linetype = "dashed", show.legend = TRUE) +
-#   geom_point(size = 1) +
-#   geom_text_repel(aes(label = isocode),colour = "#004c97", size = 2, force = 0.1) +
-#   labs(y = "DEA Score (Bootstrap)",
-#         x = "Mean Government expenditure per student, secondary", title = "Fig. 9a")  +
-#   scale_colour_manual(values = palette_imf) +
-#   imf_theme()
-# 
-# temp2 <- dea_result %>%
-#   ggplot(aes(y = (ebc_score),
-#              x = seceduexp_gdppc,
-#              color = income)) +
-#   geom_smooth(method = "lm", se=FALSE, colour = "#3d3f42", linetype = "dashed", show.legend = TRUE) +
-#   geom_point(size = 1) +
-#   geom_text_repel(aes(label = isocode),colour = "#004c97", size = 2, force = 0.1) +
-#   labs(y = "DEA Score (Bootstrap)",
-#         x = "Mean Government expenditure per student, secondary", title = "Fig. 9b")  +
-#   scale_colour_manual(values = palette_imf) +
-#   imf_theme()
-# 
-# #Arranging Multiple Plots in Columns - 2 in 1
-# ((temp1|temp2) + plot_layout(guides="collect" ) + plot_annotation(
-#   caption = "Source: World Bank, World Development Indicators, Author's Calculation",
-#   theme = theme(plot.title = element_text(size = 12),
-#                 plot.caption = element_text(size = 9.5))))
-# ggsave("./fig09.png", height = 10, width = 25, units = "cm")
-# # Remove/drop old variables
-# remove(temp, temp1, temp2)
-```
-
-
-
-```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
-# # Merge original variables in
-# temp <- dea_result %>%
-#   mutate(savings = seceduexp_s1 * (1 - ebc_score), #seceduc_pupil * (1 - ebc_score),
-#          savings_gdppc = (savings / gdp_ppp_p1) * 100)
-# 
-# temp %>% group_by(income) %>% dplyr::summarise(mean=mean(savings_gdppc, na.rm = TRUE))
-# temp %>% group_by(income) %>% dplyr::summarise(mean=mean(ebc_score, na.rm = TRUE))
-# 
-# temp1 <- temp %>% dplyr::filter(income == "Advanced Economies") %>%
-#   ggplot(aes(y = (savings_gdppc),
-#              x = reorder(isocode, -savings_gdppc))) + geom_col(fill = IMFblue) +
-#   labs(y = "",x = "Advanced Economies") + imf_theme() +
-#   theme(axis.text.x = element_text(size = 8, angle = 45))
-# temp2 <- temp %>% dplyr::filter(income == "Emerging Market Economies") %>%
-#   ggplot(aes(y = (savings_gdppc),
-#              x = reorder(isocode, -savings_gdppc))) + geom_col(fill = IMFred) +
-#   labs(y = "Savings, as percent of GDP per capita (DEA)",
-#         x = "Emerging Market Economies") + imf_theme() +
-#   theme(axis.text.x = element_text(size = 7, angle = 45))
-# temp3 <- temp %>% dplyr::filter(income == "Low Income Developing Countries") %>%
-#   ggplot(aes(y = (savings_gdppc),
-#              x = reorder(isocode, -savings_gdppc))) + geom_col(fill = IMFyellow) +
-#   labs(y = "",x = "Low Income Developing Countries") + imf_theme() +
-#   theme(axis.text.x = element_text(size = 8, angle = 45))
-# 
-# #Arranging Multiple Plots in Columns - 2 in 1
-# ((temp1/temp2/temp3) + plot_layout(guides="collect") + plot_annotation('Fig. 10 Illustrative savings from inefficiency', caption = "Source: Author's Calculation",
-#   theme = theme(plot.title = element_text(size = 12),
-#                 plot.caption = element_text(size = 9.5))))
-# 
-# ggsave("./fig10.png", height = 25, width = 20, units = "cm")
-# 
-# # Remove/drop old variables
-# remove(temp, temp1, temp2, temp3)
-```
-
-
-
-In particular, LIDCs have average potential gains of 14.41% of GDP per capita, compared to 6.0% for AEs and 6.17% for EMEs.
-In Fig. 11a, I plot the efficiency scores against the World Bank's Government Effectiveness estimate. The charts shows that there is a positive relationship between spending efficiency and government effectiveness. This is to be expected given stronger government institutions are important in raising spending efficiency.
-
-
-
-
-
-In any case, it may be prudent to perceive efficiency scores of certain countries with low statistical capacity scores with extra scrutiny. As an example, I added a red vertical line to show the threshold for capacity scores of 60. Estimates for countries below this threshold, including Afghanistan (AFG), Marshall Islands (MHL), Burundi (BDI), may have particularly inaccurate estimates.
-
-\newpage
-
-
-
-
-
-
-# Section III: Socio-economic factors 
-
-
-
-
-
-```{r}
-# dea_result %>%
-#   ggplot(aes(y = (ebc_score),
-#              x = govt_eff,
-#              color = income,
-#              label = isocode)) +
-#   geom_smooth(method = "lm", se=FALSE, colour = "#3d3f42", linetype = "dashed", show.legend = TRUE) +
-#   geom_point(size = 1) +
-#   geom_text_repel(colour = "#004c97", size = 2, force = 0.1) +
-#   scale_colour_manual(values = palette_imf) +
-#   imf_theme()
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+Visualizing these Bootstrapped DEA scores shows the possible issues of DEA. It emphasizes the need for sensitivity analysis around the composition of countries (or DMUs) in the sample data set and how peer DMUs can affect scores. Applying Bootstrapped simulations to generate distributions of efficiency scores and calculating summary statistics does not necessarily “solve” the sensitivity issue. However, the practice may help any policy analysts using the method to understand the caveats of DEA and interpret the output accordingly.
 
 
 
 
 # Appendix
+
 ## Bibliography
 - https://data.worldbank.org/
 - [RDocumentation: Data from the World Bank API](https://www.rdocumentation.org/packages/wbstats/versions/0.2/topics/wb)
@@ -853,3 +684,89 @@ NY.GDP.PCAP.PP.CD	World Development Indicators	GDP per capita, PPP (current inte
 
 
 
+```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
+# temp1 <- dea_result %>%
+#   ggplot(aes(y = (ebc_score),
+#              x = seceduexp_s1,
+#              color = income)) +
+#   geom_smooth(method = "lm", se=FALSE, colour = "#3d3f42", linetype = "dashed", show.legend = TRUE) +
+#   geom_point(size = 1) +
+#   geom_text_repel(aes(label = isocode),colour = "#004c97", size = 2, force = 0.1) +
+#   labs(y = "DEA Score (Bootstrap)",
+#         x = "Mean Government expenditure per student, secondary", title = "Fig. 9a")  +
+#   scale_colour_manual(values = palette_imf) +
+#   imf_theme()
+# 
+# temp2 <- dea_result %>%
+#   ggplot(aes(y = (ebc_score),
+#              x = seceduexp_gdppc,
+#              color = income)) +
+#   geom_smooth(method = "lm", se=FALSE, colour = "#3d3f42", linetype = "dashed", show.legend = TRUE) +
+#   geom_point(size = 1) +
+#   geom_text_repel(aes(label = isocode),colour = "#004c97", size = 2, force = 0.1) +
+#   labs(y = "DEA Score (Bootstrap)",
+#         x = "Mean Government expenditure per student, secondary", title = "Fig. 9b")  +
+#   scale_colour_manual(values = palette_imf) +
+#   imf_theme()
+# 
+# #Arranging Multiple Plots in Columns - 2 in 1
+# ((temp1|temp2) + plot_layout(guides="collect" ) + plot_annotation(
+#   caption = "Source: World Bank, World Development Indicators, Author's Calculation",
+#   theme = theme(plot.title = element_text(size = 12),
+#                 plot.caption = element_text(size = 9.5))))
+# ggsave("./fig09.png", height = 10, width = 25, units = "cm")
+# # Remove/drop old variables
+# remove(temp, temp1, temp2)
+
+
+# # Merge original variables in
+# temp <- dea_result %>%
+#   mutate(savings = seceduexp_s1 * (1 - ebc_score), #seceduc_pupil * (1 - ebc_score),
+#          savings_gdppc = (savings / gdp_ppp_p1) * 100)
+# 
+# temp %>% group_by(income) %>% dplyr::summarise(mean=mean(savings_gdppc, na.rm = TRUE))
+# temp %>% group_by(income) %>% dplyr::summarise(mean=mean(ebc_score, na.rm = TRUE))
+# 
+# temp1 <- temp %>% dplyr::filter(income == "Advanced Economies") %>%
+#   ggplot(aes(y = (savings_gdppc),
+#              x = reorder(isocode, -savings_gdppc))) + geom_col(fill = IMFblue) +
+#   labs(y = "",x = "Advanced Economies") + imf_theme() +
+#   theme(axis.text.x = element_text(size = 8, angle = 45))
+# temp2 <- temp %>% dplyr::filter(income == "Emerging Market Economies") %>%
+#   ggplot(aes(y = (savings_gdppc),
+#              x = reorder(isocode, -savings_gdppc))) + geom_col(fill = IMFred) +
+#   labs(y = "Savings, as percent of GDP per capita (DEA)",
+#         x = "Emerging Market Economies") + imf_theme() +
+#   theme(axis.text.x = element_text(size = 7, angle = 45))
+# temp3 <- temp %>% dplyr::filter(income == "Low Income Developing Countries") %>%
+#   ggplot(aes(y = (savings_gdppc),
+#              x = reorder(isocode, -savings_gdppc))) + geom_col(fill = IMFyellow) +
+#   labs(y = "",x = "Low Income Developing Countries") + imf_theme() +
+#   theme(axis.text.x = element_text(size = 8, angle = 45))
+# 
+# #Arranging Multiple Plots in Columns - 2 in 1
+# ((temp1/temp2/temp3) + plot_layout(guides="collect") + plot_annotation('Fig. 10 Illustrative savings from inefficiency', caption = "Source: Author's Calculation",
+#   theme = theme(plot.title = element_text(size = 12),
+#                 plot.caption = element_text(size = 9.5))))
+# 
+# ggsave("./fig10.png", height = 25, width = 20, units = "cm")
+# 
+# # Remove/drop old variables
+# remove(temp, temp1, temp2, temp3)
+###############################################################################
+# SCORE DIST #
+###############################################################################
+# dea_result %>%
+#   dplyr::group_by(income) %>%
+#   summarise(mean.ebc_score = mean(ebc_score, na.rm = TRUE),
+#             sd.ebc_score = sd(ebc_score, na.rm = TRUE),
+#             n.ebc_score = n()) %>%
+#   mutate(se.ebc_score = sd.ebc_score / sqrt(n.ebc_score),
+#          ci.ebc_score = qt(1 - (0.1 / 2), n.ebc_score - 1) * se.ebc_score) %>%
+#   ggplot(aes(x=mean.ebc_score, y=reorder(income, mean.ebc_score))) + 
+#     geom_bar(position=position_dodge(), stat="identity", fill = "#cb3960") +
+#     geom_errorbar(aes(xmin=mean.ebc_score-ci.ebc_score, xmax=mean.ebc_score+ci.ebc_score),
+#                   width=.5,                    # Width of the error bars
+#                   position=position_dodge(.9))+
+#   labs(x = "DEA Efficiency Score", y = "Income Group") + imf_theme()
+```
