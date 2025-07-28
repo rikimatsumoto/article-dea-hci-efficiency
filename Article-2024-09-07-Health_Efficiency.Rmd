@@ -1,0 +1,855 @@
+---
+title: "Benchmarking Human Capital Expenditures using Monte-Carlo Data Envelopment Analysis scores"
+author: "Riki Matsumoto"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
+###############################################################################
+# Load packages & dataset #
+###############################################################################
+#   |\      _,,,---,,_             
+#   /,`.-'`'    -.  ;-;;,_         riki
+#  |,4-  ) )-,_. ,\ (  `'-'
+# '---''(_/--'  `-'\_)
+# Load packages
+library(tidyverse); library(lubridate); library(gridExtra); library(tidytext); 
+
+# Set default chunk options
+knitr::opts_chunk$set(message=FALSE,
+                      error=FALSE,
+                      warning=FALSE,
+                      echo=FALSE, # = false to hide code
+                      fig.width=10, 
+                      fig.height=8) 
+
+# Color palettes
+palette_4 <- c("#2d6074","#e6b752","#188c81","#d5624b")
+IMFblue<-"#3370AC"; IMFred<-"#DA291C"; IMFyellow <- "#e6b752"
+palette_imf <- c(IMFblue, IMFred, IMFyellow)
+
+# IMF fonts
+imf_theme <- function() {
+  theme(text = ggplot2::element_text(face = "plain", family = "Segoe UI"),
+        axis.text = ggplot2::element_text(size = 9.5),
+        axis.title = ggplot2::element_text(size = 10.25),
+        panel.grid.major.y = ggplot2::element_blank(), panel.background = ggplot2::element_blank(),
+        panel.border = ggplot2::element_rect(colour = "#b3b3b3",fill=NA,size = 0.5),
+        axis.ticks.x = ggplot2::element_line(colour = "#b3b3b3",size = 0.5),
+        axis.ticks.y = ggplot2::element_line(colour = "#b3b3b3",size = 0.5),
+        axis.ticks.length=unit(-0.25, "cm"),
+        axis.text.y = ggplot2::element_text(margin = unit(c(0,0.1,0,0), "cm")),
+        axis.line.x = ggplot2::element_blank(),
+        plot.caption = element_text(size = 9.5),
+        plot.title = element_text(size = 12)
+        )
+}
+
+# Load additional packages
+library(readxl); #package for reading excel (.xlsx/.xls) files.
+library(ggrepel);
+library(haven); # package to read .dta Stata data file formats
+library(Benchmarking); # package that runs DEA
+library(wbstats); # package for WB WDI data
+library(patchwork); # package for arranging multiple plots
+
+# Set working directory
+wd_path <- getwd()
+setwd(wd_path)
+
+# Import in .dta dataset and assign to ifscode_dat
+ifscode_dat <- haven::read_dta("./MasterCountryListWEO_2021_11_18.dta") %>%
+  dplyr::select(isocode, country, income, region)
+```
+
+
+```{r}
+func_scatter <- function (df, x_var, y_var, grouping, x_var_txt, y_var_txt) {
+  df %>%
+    ggplot(aes(y = y_var, x = x_var, color = grouping, group = grouping)) +
+    geom_point(size = 1) + 
+    theme(legend.position="top") +
+    geom_text_repel(aes(label = isocode), color = "black", size = 2) +
+    # labs(x = x_var_txt, y = y_var_txt, title = title_txt, color = NULL) +
+    labs(x = x_var_txt, y = y_var_txt, color = NULL) +
+    scale_color_manual(values = palette_imf) +
+    imf_theme()
+}
+func_boxplot <- function (df, y_var, grouping, y_var_txt, x_var_txt) {
+  df %>%
+    ggplot(aes(y = y_var,fill = grouping)) +
+    geom_boxplot() +
+    theme(legend.position="top") +
+    # labs(x = x_var_txt, y = y_var_txt, title = title_txt) +
+    labs(x = NULL, y = y_var_txt, fill = NULL) +
+    scale_fill_manual(values = palette_imf) +
+    imf_theme()
+}
+
+# Data viz
+func_hist_dea <- function(df, option = "ebc_score", country_iso){
+  if(option == "ebc_score") {
+    df %>%
+    dplyr::filter(isocode == country_iso) %>%
+    ggplot(aes(x = ebc_score)) +
+    geom_histogram(fill = "#3370AC", bins = 50) +
+    labs(x = "Dist.", y = "Count", title = paste("Histogram",country_iso)) +
+    imf_theme()
+  } else {
+    if (option == "e_score") {
+      df %>%
+      dplyr::filter(isocode == country_iso) %>%
+      ggplot(aes(x = e_score)) +
+      geom_histogram(fill = "#3370AC", bins = 50) +
+      labs(x = "Dist.", y = "Count", title = paste("Histogram",country_iso),
+           caption = "Source: World bank World Development Indicators, Author's Calculation") +
+      imf_theme()
+      } else {
+        print("Select option e_score or ebc_score")
+      }
+  }}
+
+# Data viz
+func_hist_dea_2 <- function(df, option = "ebc_score", country_iso){
+  if(option == "ebc_score") {
+    df %>%
+    dplyr::filter(isocode %in% country_iso) %>%
+    ggplot(aes(x = ebc_score)) +
+    geom_histogram(fill = "#3370AC", bins = 50) +
+    facet_wrap(~country, nrow = 2, scales = "free_x") +
+    labs(x = "Dist. of DEA scores", y = "Count") +
+    imf_theme()
+  } else {
+    print("Select option ebc_score")
+      }
+  }
+# Define Z-score normalization function
+zscore_norm <- function(x) {
+  ((x - mean(x, na.rm = TRUE))/sd(x, na.rm = TRUE))
+}
+```
+
+
+
+
+
+*Summary*: 
+
+
+# Introduction
+
+
+
+\newpage
+
+# Section I: Exploratory Data Analysis
+
+## Overview of the (World Bank) data
+
+The primary data source for this analysis is the World Bank databank [The World Bank databank is a tremendous repository of development indicators, compiled from officially recognised international sources. It presents the most current and accurate global development data available, and includes national, regional and global estimates.](https://datacatalog.worldbank.org/home)
+
+Interacting with World Bank data is easy - the `wbopendata` module connects to the World Bank Open Data API and provides direct access to the latest version of the Bank’s data. The [R `wbstats` package makes it particularly convenient.](https://cran.r-project.org/web/packages/wbstats/vignettes/wbstats.html).
+
+To assess the relationship between human capital and spending in health and education, I decided to use the [World Bank's Human Capital Index (HCI)](https://www.worldbank.org/en/publication/human-capital#Index), which quantifies the contribution of health and education to the productivity of the next generation of workers. The HCI can be used by governments to assess how much income and economic growth they are foregoing because of gaps in human capital. The World Bank's HCI is specifically defined as "the amount of human capital a child born today could expect to attain by age 18, given the risks to poor health and education" in their countries. 
+
+On the spending (input) side, I use general government expenditure on education, domestic government and private expenditure on health, and external expenditure on health. Generally, education expenditures continues to overwhelmingly be public, while health spending can be a combination of public and private. Moreover, lower income countries tend to rely on external spending sources for health.
+
+```{r, wbstats loader}
+# This code is used to determine whether specific variables are available through the wbstats API https://cran.r-project.org/web/packages/wbstats/vignettes/wbstats.html note below is a larger download/pull so may take more than a few seconds
+
+data_updates <- 0
+
+# Creating list of variables needed
+wb_var_list <- data.frame(wb_codes = c("SP.POP.TOTL",
+                 # Output (human capital index)
+                 "HD.HCI.OVRL","HD.HCI.OVRL.LB","HD.HCI.OVRL.UB",
+                 # Input (expenditure variables)
+                 "SE.XPD.TOTL.GD.ZS","SH.XPD.GHED.GD.ZS","SH.XPD.PVTD.PP.CD","SH.XPD.EHEX.PP.CD",
+                 # Normalising variables
+                 "NY.GDP.PCAP.PP.KD","NY.GDP.PCAP.PP.CD",
+                 # Extra variable
+                 "GC.TAX.TOTL.GD.ZS"), 
+                 wb_api_access = NA)
+
+if (data_updates == 1){
+  # wb_datalist <- wbstats::wb_cache()
+  # wb_datalist <- wb_datalist$indicators
+  # wb_var_list <- wb_var_list %>%
+  #   dplyr::mutate(wb_api_access = if_else(wb_codes %in% wb_datalist$indicator_id,"Use wbstats API","Not available via API")) %>%
+  #   dplyr::filter(wb_api_access == "Use wbstats API")
+
+  wb_raw <- wbstats::wb_data(country = "countries_only",
+                                     indicator = unique(wb_var_list$wb_codes),
+                                     mrv = 10) %>%
+    dplyr::select(-c("iso2c","country")) %>%
+    dplyr::rename(Code = iso3c, Year = date)
+  
+  wb_raw <- wb_raw %>%
+    dplyr::rename_all(tolower) %>%
+    dplyr::group_by(code,year) 
+  
+
+
+  openxlsx::write.xlsx(wb_raw,paste0(wd_path,'/wbstats_data_new.xlsx'))
+  remove(indicators, wb_var_list)
+} else {
+  wb_raw <- readxl::read_excel(path = paste0(wd_path, "/wbstats_data_new.xlsx"))  %>%
+    dplyr::group_by(code,year) %>%
+    dplyr::summarise(across(gc.tax.totl.gd.zs:sp.pop.totl, mean))
+}
+
+# Print data to check
+head(wb_raw)
+```
+
+
+
+
+```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
+# CLeaning & Tidying up data
+temp <- wb_raw %>%
+  # Generate new variables for analysis
+  dplyr::mutate(gg_edu_exp_p1 = (se.xpd.totl.gd.zs/100) * ny.gdp.pcap.pp.kd,
+                gg_hea_exp_p1 = (sh.xpd.ghed.gd.zs/100) * ny.gdp.pcap.pp.kd,
+                pr_hea_exp_p1 = (sh.xpd.pvtd.pp.cd/ny.gdp.pcap.pp.cd) * ny.gdp.pcap.pp.kd,
+                ex_hea_exp_p1 = (sh.xpd.ehex.pp.cd/ny.gdp.pcap.pp.cd) * ny.gdp.pcap.pp.kd) %>%
+  dplyr::rename(hci_ovrl = hd.hci.ovrl, hci_ovrl_lb = hd.hci.ovrl.lb, hci_ovrl_ub = hd.hci.ovrl.ub,
+                gdp_ppp_p1 = ny.gdp.pcap.pp.kd,
+                tax_gdp = gc.tax.totl.gd.zs)
+
+# Keep only variables needed for analysis
+wb_master <- temp %>%
+  # Keep the following variables
+  dplyr::select(code, year, tax_gdp,starts_with("hci_"),
+                ends_with("_p1")) %>%
+  # Keep if years more than or equal to 2000
+  dplyr::filter(year >= 2000)
+  
+
+# Merge income groups
+wb_master <- dplyr::right_join(ifscode_dat[,c("isocode","income","region")],wb_master,
+                             by = c("isocode"="code")) %>%
+  dplyr::filter(!is.na(region))
+
+# Glimpse data to check
+head(wb_master)
+
+# Remove/drop old variables
+remove(temp)
+```
+
+```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
+# Glimpse data to check
+wb_viz <- wb_master %>%
+  group_by(isocode) %>%
+  dplyr::summarise(income = last(income),
+                   region = last(region),
+                   across(c(starts_with("hci_"),ends_with("_p1")), ~ mean(.x, na.rm = TRUE))) %>%
+  ungroup() 
+
+wb_viz %>% group_by(income) %>% dplyr::summarise(mean=mean(gg_edu_exp_p1, na.rm = TRUE))
+wb_viz %>% group_by(income) %>% dplyr::summarise(mean=mean(gg_hea_exp_p1, na.rm = TRUE))
+wb_viz %>% group_by(income) %>% dplyr::summarise(mean=mean(pr_hea_exp_p1, na.rm = TRUE))
+wb_viz %>% group_by(income) %>% dplyr::summarise(mean=mean(ex_hea_exp_p1, na.rm = TRUE))
+```
+
+Fig. X shows the distribution of health and education expenditure per capita in 2017 USD PPP. On average, AEs spend close to 16 times more on a PPP per capita basis for education when compared to LIDCs, and close to 3 times more when compared to EMEs. The difference in domestic government spending in health is even higher. On average, AEs spend about 3740 USD per capita, EMEs about 764 USD per capita, and LIDCs about 84 USD per capita. In contrast, external health expenditures per capita are higher on average in LIDCs, than in AEs, given the grants and aid provided to poorer countries.
+
+```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
+# Boxplot
+temp1 <- func_boxplot(wb_viz, wb_viz$gg_edu_exp_p1,wb_viz$income, "Government education expenditure, 
+per capita, (2017 USD PPP)", "Income Group")
+# Boxplot
+temp2 <- func_boxplot(wb_viz, wb_viz$gg_hea_exp_p1, wb_viz$income, "Domestic government health expenditure, 
+per capita, (2017 USD PPP)", "Income Group")
+# Boxplot
+temp3 <- func_boxplot(wb_viz, wb_viz$pr_hea_exp_p1, wb_viz$income, "Domestic private health expenditure, 
+per capita, (2017 USD PPP)", "Income Group")
+# Boxplot
+temp4 <- func_boxplot(wb_viz, wb_viz$ex_hea_exp_p1, wb_viz$income, "External health expenditure, 
+per capita,(2017 USD PPP)", "Income Group")
+
+# Arranging Multiple Plots
+(((temp1|temp2)/(temp3|temp4)) + plot_layout(guides="collect") + plot_annotation(
+  caption = 'Source: World Bank, World Development Indicators', title = "Figure 1",
+  tag_levels = c('A'),
+                            tag_sep = '.', tag_suffix = ':',
+  theme = theme(plot.title = element_text(size = 12), legend.position="bottom",
+                plot.caption = element_text(size = 9.5))))
+ggsave("./fig01.png", height = 18, width = 25, units = "cm")
+remove(temp1, temp2, temp3, temp4)
+```
+
+Next, let's look at scatter plots of human capital variables. Fig. XX shows expenditures in education and health (x-axis) plotted against the Human Capital Index (y-axis). It's clear that the largest improvements to the Human Capital Index, occur within the first $2000 per capita expenditure in health and education. As expenditures increase further, marginal returns to Human Capital tend to diminish.
+
+From an input-output perspective, an illustrative efficiency frontier can be observed for countries that have higher levels of human capital among peers with similar levels of spending. For example, in Fig. a, Singapore achieves a higher level of human capital than Norway with close to 90% more expenditures. Of course, this observation should be taken as illustrative.
+
+As a side note, Fig. d does not show the convex positive relationship between spending and human capital, as the spending item is solely comprised of externally financed health spending. Given external financing, such as development aid, is largely meant for developing countries, I should expect to see a negative relationship.
+
+```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
+# Scatter: 
+temp1 <- func_scatter(wb_viz, wb_viz$gg_edu_exp_p1, wb_viz$hci_ovrl, wb_viz$income, "Government education expenditure, 
+per capita, (2017 USD PPP)", "") 
+
+# Scatter: 
+temp2 <- func_scatter(wb_viz, wb_viz$gg_hea_exp_p1, wb_viz$hci_ovrl, wb_viz$income, "Domestic government health expenditure, 
+per capita,(2017 USD PPP)", "") 
+
+# Scatter: 
+temp3 <- func_scatter(wb_viz, wb_viz$pr_hea_exp_p1, wb_viz$hci_ovrl, wb_viz$income, "Domestic private health expenditure, 
+per capita, (2017 USD PPP)", "") 
+
+# Scatter: 
+temp4 <- func_scatter(wb_viz, wb_viz$ex_hea_exp_p1, wb_viz$hci_ovrl, wb_viz$income, "External health expenditure, 
+per capita, (2017 USD PPP)", "")
+
+# Arranging Multiple Plots
+(((temp1|temp2)/(temp3|temp4)) + plot_layout(guides="collect") + plot_annotation(
+  caption = 'Source: World Bank, World Development Indicators', title = "Figure 2 Health/Education Expenditure & Human Capital",
+  tag_levels =  c('A'), tag_sep = '.', tag_suffix = ':',
+  theme = theme(plot.title = element_text(size = 12), legend.position="bottom",
+                plot.caption = element_text(size = 9.5))))
+ggsave("./fig02.png", height = 18, width = 25, units = "cm")
+remove(temp1, temp2, temp3, temp4)
+```
+
+
+Overall, the brief data exploration reaffirms the obvious. Unsurprisingly, variables capturing education outcomes are positively correlated with spending, while spending is correlated with level of development. 
+
+Outcome indicators tend to be less favourable in EMEs and LIDCs. However, it also seems that there are countries spending similar levels with different outcomes - evidence of differences in efficiency.
+
+One important conclusion from the data exploration is the choice of metrics for education outcomes. 
+
+
+
+\newpage
+
+
+# Section II: Monte Carlo simulations of DEA efficiency scores
+
+DATA GENERATING PROCESS
+
+
+
+## Brief overview of Data Envelopment Analysis (DEA), bootstrapping, and Principal Components Analysis (PCA)
+
+
+The model specification for this analysis is variable returns to scale (VRS), and 
+
+
+A statistical framework requires an axiomatic approach to a statistical model including a specification of a sampling procedure sometimes denoted a Data Generating Process (DGP). A given set of data is regarded as a sample from a large population and a set of efficiency scores is considered one out of many possible outcomes.
+
+
+### Advantages of Using DEA with Monte Carlo Simulations
+
+1. **Non-Parametric Approach**: DEA does not assume a specific functional form between inputs and outputs, making it versatile and widely applicable across different types of data and sectors.
+2. **Comparative Analysis**: It allows for the direct comparison of multiple entities based on multiple inputs and outputs, making it ideal for cross-country comparisons in public health and education.
+3. **Incorporation of Multiple Inputs and Outputs**: DEA can handle multiple inputs and outputs simultaneously, assessing efficiency in complex scenarios where multiple factors influence performance.
+4. **Uncertainty Analysis**: By integrating Monte Carlo simulations, the method quantifies uncertainty in efficiency scores, providing a deeper insight into the reliability of the results and identifying countries with higher variability in performance.
+
+### Disadvantages and Assumptions
+
+1. **Sensitivity to Extreme Values**: DEA can be sensitive to outliers or extreme values, as these can significantly influence the shape of the efficiency frontier.
+2. **Static Nature**: Traditional DEA models are static and do not easily track changes over time unless time-series data are specifically incorporated.
+3. **Assumption of Homogeneity**: DEA assumes that DMUs are attempting to function in similar environments and with similar goals, which might not always hold true across different countries with diverse socio-economic contexts.
+4. **Data Quality and Availability**: The accuracy of DEA results is highly dependent on the quality and completeness of input and output data. Incomplete data can skew efficiency scores.
+5. **Subjectivity in Variable Selection**: The choice of inputs and outputs can subjectively affect the DEA results, and different selections can lead to different efficiency classifications.
+
+### Conclusion
+
+Integrating Monte Carlo simulations into DEA for analyzing public health and education expenditures enhances the robustness of the efficiency estimates by addressing the inherent uncertainty in any data-driven analysis. This methodological innovation allows policymakers to not only identify performance benchmarks but also understand the reliability of these benchmarks in guiding policy decisions. While DEA offers substantial benefits in operational efficiency analysis, careful consideration must be given to its assumptions and potential limitations to fully leverage its insights.
+
+
+
+
+
+## Data Envelopment Analysis Implementation in R
+
+There are numerous packages in R such as lpSolve, Benchmarking, FEAR to do DEA Analysis. In this note, I use the `Benchmarking` package due to the simplicity in use, speed, and accompanying textbook (which I wholeheartedly recommend for those interested in futher reading).
+
+The input indicators capture the level of education spending and the level of development:
+- [*gg_edu_exp_p1* - Total Government expenditure on education, per capita (USD PPP)](https://data.worldbank.org/indicator/SE.XPD.TOTL.GD.ZS): defined as the general government expenditure on education (current, capital, and transfers) expressed in USD PPP terms per capita. It includes expenditure funded by transfers from international sources to government. General government usually refers to local, regional and central governments.
+
+- [*gg_hea_exp_p1* - Domestic general government expenditure on health, per capita (USD PPP)](https://data.worldbank.org/indicator/SH.XPD.GHED.GD.ZS): defined as the domestic general government health expenditure expressed in USD PPP terms per capita. Public expenditure on health from domestic sources.
+
+- [*pr_hea_exp_p1* - Domestic private health expenditure, per capita (USD PPP)](https://data.worldbank.org/indicator/SH.XPD.PVTD.PP.CD): defined as the domestic private health expenditure per capita, PPP (constant international $).
+
+- [*ex_hea_exp_p1* - External health expenditure, per capita (USD PPP)](https://data.worldbank.org/indicator/SH.XPD.EHEX.PP.CD): defined as the domestic private health expenditure per capita, PPP (constant international $). External sources are composed of direct foreign transfers and foreign transfers distributed by government encompassing all financial inflows into the national health system from outside the country.
+
+- [*gdp_ppp_p1* - GDP per capita, PPP (constant 2017 international $)](https://data.worldbank.org/indicator/NY.GDP.PCAP.PP.KD): defined as GDP per capita based on purchasing power parity (PPP). PPP GDP is gross domestic product converted to international dollars using purchasing power parity rates from the [International Comparison Program.](https://www.worldbank.org/en/programs/icp)
+
+The output indicators are the Health/Education Human Capital Index produced by the World Bank:
+- [*hci_ovrl/hci_ovrl_lb/hci_ovrl_ub* - Health Nutrition Population	Human capital index (HCI) (scale 0-1)](https://data.worldbank.org/indicator/HD.HCI.OVRL): The HCI (overall, lower bound, and upper bound) calculates the contributions of health and education to worker productivity. The final index score ranges from zero to one and measures the productivity as a future worker of child born today relative to the benchmark of full health and complete education.
+
+To tackle issues where variables with large magnitudes of variance can be over-represented in DEA, I Z-score normalize all variables. DEA does not allow for values less than or equal to zero, so I then rescale each variable such that the new output variables are `variable = ABS(variable - max(variable))` where the smallest value is now 0 (which I recode as 0.0001).
+
+Normalising is also important given PCA directions are highly sensitive to data scaling. The raw variables are measured on different scales so I want to assign equal importance to all variables.
+
+```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
+###############################################################################
+# I. STANDARDISATION (Z-SCORE NORMALISATION) #
+###############################################################################
+# Apply Z-score normalisation
+wb_dea <- wb_viz %>% dplyr::group_by(isocode) %>%
+  dplyr::mutate(gg_exp_p1 = sum(gg_edu_exp_p1,gg_hea_exp_p1,pr_hea_exp_p1,ex_hea_exp_p1,na.rm = T)) %>%
+  dplyr::select(isocode, hci_ovrl,hci_ovrl_lb,hci_ovrl_ub, gdp_ppp_p1, gg_exp_p1) %>% dplyr::ungroup() %>%
+  dplyr::mutate(across(c(starts_with("hci_"), ends_with("_p1")), zscore_norm))
+
+wb_dea<-na.omit(wb_dea)
+
+#####################################################################
+# IV. Version Baum, A., T. Mogues and G. Verdier (2020) - PCA #
+#####################################################################
+# Running PCA - Scale set as FALSE as we already scaled.
+temp1 <- prcomp(wb_dea[,c("hci_ovrl","hci_ovrl_lb","hci_ovrl_ub")], scale = FALSE) # Scale set False as we have already normalised
+temp2 <- data.frame(m1_p1a = temp1$x[, 1]) # Select the first Principal Component
+wb_dea <- cbind(wb_dea, temp2) # Column-bind the PCs with the piex dataframe.
+
+# Recode pca index value 0 with 0.0001
+wb_dea <- wb_dea %>%
+  dplyr::mutate(m1_p1a = abs(m1_p1a - min(m1_p1a, na.rm = TRUE)),
+                m1_p1a = replace(m1_p1a, m1_p1a == 0, 0.0001),
+                gdp_ppp_p1 = gdp_ppp_p1 - min(gdp_ppp_p1, na.rm = TRUE),
+                gdp_ppp_p1 = replace(gdp_ppp_p1, gdp_ppp_p1 == 0, 0.0001),
+                gg_exp_p1 = gg_exp_p1 - min(gg_exp_p1, na.rm = TRUE),
+                gg_exp_p1 = replace(gg_exp_p1, gg_exp_p1 == 0, 0.0001))
+
+# Data
+head(wb_dea,n=3)
+
+remove(temp1,temp2)
+```
+
+The following depicts the scree plot for the PCA. As shown, the first PC captures about 80% of the explained variance in the data.
+
+```{r}
+temp1 <- prcomp(wb_dea[,c("hci_ovrl","hci_ovrl_lb","hci_ovrl_ub")], scale = FALSE)
+# Getting components for a scree plot
+temp_p1a_ve <- data.frame(stringsAsFactors=FALSE,
+                        pc_no = c("PC01", "PC02", "PC03"),
+                        sdev = temp1$sdev)
+
+temp2 <- temp_p1a_ve$sdev^2
+temp_p1a_ve$ve_prop <- temp2/sum(temp2)
+
+# GGplot
+temp_p1a_ve %>%
+  ggplot(aes(y = ve_prop, x = pc_no)) +
+  geom_col(fill = "#2d6074") +
+  labs(y = "Proportion of Variance (explained",
+       x = "Number of PCs", title = "Fig. X", caption = "Source: Author's Calculation") +
+  imf_theme()
+# ggsave("./fig05.png", height = 10, width = 20, units = "cm")
+
+# Remove any temp objects
+remove(temp1, temp2, temp_p1a_ve)
+```
+
+Using the first PC as the "output" variable, I can plot it against education expenditure. 
+
+```{r}
+wb_dea %>%
+  ggplot(aes(y = m1_p1a, x = gg_exp_p1)) +
+  geom_point(size = 1) + 
+  geom_text_repel(aes(label = isocode), color = "black", size = 2) +
+  # theme(legend.position="none") +
+  scale_color_manual(values = palette_imf) +
+  labs(y = "Human Capital Index (principal component)",
+       x = "Health & Education total expenditure per capita, 
+      (principal component)", title = "Figure 3", caption = "Source: World bank World Development Indicators, Author's Calculation") +
+  imf_theme()
+
+ggsave("./fig03.png", height = 18, width = 25, units = "cm")
+```
+
+
+
+
+
+
+
+
+
+```{r}
+#########################################################
+# DEA Model #
+#########################################################
+dea_run <- 0
+if (dea_run == 1) {
+  # Setting random values
+  set.seed(321)
+  
+  # Number of loops
+  B <- 10000
+  
+  # Below code takes the total number of observations, and also number of observations for 80% (rounded)
+  n_full <- nrow(wb_dea)
+  n_train <- round(n_full * 0.7)
+  
+  dea_temp_full <- wb_dea %>%
+    ungroup() %>%
+    # Select is the equivalent of keep in Stata
+    dplyr::select(isocode, gg_exp_p1,gdp_ppp_p1,m1_p1a) 
+  
+  # Create a data frame with the variable labels
+  dea_result <- data.frame(matrix(ncol = 7, nrow = 0))
+  colnames(dea_result) <- c("isocode", "e_score","ebc_score","ebc_inf","ebc_sup","model")
+  
+  for (b in 1:B){
+    # This creates the random train-test split.
+    cv_flag <- sort(sample(1:n_full, n_train));
+    dea_temp <- dea_temp_full[cv_flag,]
+    
+    # Setting the inoputs and outputs
+    inp_var <- as.matrix(dea_temp[c('gg_exp_p1', 'gdp_ppp_p1')])
+    out_var <- as.matrix(dea_temp[c("m1_p1a")])
+    
+    # Running bootstrap DEA with repetitions and 95% CI
+    result <- Benchmarking::dea.boot(X = inp_var, Y = out_var, RTS="vrs", ORIENTATION="out", NREP=30, alpha=0.05)
+    
+    # Results from the bootstrap DEA code
+    z0<-diag(result$eff)
+    x0<-diag(result$eff.bc)
+    w0<-result$conf.int
+    winf<-diag(w0[,1])
+    wsup<-diag(w0[,2])
+    winf<-solve(winf)
+    wsup<-solve(wsup)
+    ebc_sup<-diag(winf)
+    ebc_inf<-diag(wsup)
+    z1<-solve(z0)
+    x1<-solve(x0)
+    e_score<-diag(z1)
+    ebc_score<-diag(x1)
+    
+    # Save results to dataframe
+    dea_output_temp <-data.frame(dea_temp,e_score,ebc_score,ebc_inf,ebc_sup)
+    dea_output_temp$iteration <- b
+    
+    # Print first few rows of results
+    head(dea_output_temp)
+    
+    dea_result <- rbind(dea_result,dea_output_temp)
+    
+    remove(z0, x0, w0, winf, wsup, winf, wsup, ebc_sup, ebc_inf, z1, x1, e_score, ebc_score, 
+           result, dea_output_temp, dea_temp, inp_var, out_var)
+  
+  }
+  
+  # Merge income groups in
+  dea_result <- merge(x = dea_result, y = ifscode_dat,
+                      by = "isocode", all.x = TRUE, all.y = FALSE) 
+    
+  remove(dea_temp_full, b, B)
+
+  openxlsx::write.xlsx(dea_result,paste0(wd_path,'/dea_result.xlsx'))
+  
+} else {
+  dea_result <- readxl::read_excel(path = paste0(wd_path, "/dea_result.xlsx"))
+}
+
+```
+
+
+
+
+The below figure shows the average test errors of each model.
+
+```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
+###############################################################################
+# TESTING ERROR #
+###############################################################################
+# dea_result %>%
+#   dplyr::group_by(income) %>%
+#   summarise(mean.ebc_score = mean(ebc_score, na.rm = TRUE),
+#             sd.ebc_score = sd(ebc_score, na.rm = TRUE),
+#             n.ebc_score = n()) %>%
+#   mutate(se.ebc_score = sd.ebc_score / sqrt(n.ebc_score),
+#          ci.ebc_score = qt(1 - (0.1 / 2), n.ebc_score - 1) * se.ebc_score) %>%
+#   ggplot(aes(x=mean.ebc_score, y=reorder(income, mean.ebc_score))) + 
+#     geom_bar(position=position_dodge(), stat="identity", fill = "#cb3960") +
+#     geom_errorbar(aes(xmin=mean.ebc_score-ci.ebc_score, xmax=mean.ebc_score+ci.ebc_score),
+#                   width=.5,                    # Width of the error bars
+#                   position=position_dodge(.9))+
+#   labs(x = "DEA Efficiency Score", y = "Income Group", title = paste0("Test Error, Average")) + imf_theme()
+```
+
+
+
+```{r}
+dea_result %>%
+  dplyr::group_by(income) %>%
+  summarise(mean.ebc_score = mean(ebc_score, na.rm = TRUE),
+            sd.ebc_score = sd(ebc_score, na.rm = TRUE))
+
+temp2 <- dea_result %>%
+  dplyr::group_by(isocode) %>%
+  summarise(mean.ebc_score = mean(ebc_score, na.rm = TRUE),
+            sd.ebc_score = sd(ebc_score, na.rm = TRUE),
+            income = last(income)) %>%
+  ggplot(aes(x = sd.ebc_score, y = income, fill = income)) +
+  geom_boxplot() +
+  stat_summary(fun.x=mean, geom="point", shape=1, size=5, color="black") +
+  theme(legend.position="none") +
+  labs(y = NULL, x = "Standard deviation of efficiency scores by country") +
+  scale_fill_manual(values = palette_imf) +
+  imf_theme()
+
+temp1 <- dea_result %>%
+  dplyr::group_by(isocode) %>%
+  summarise(mean.ebc_score = mean(ebc_score, na.rm = TRUE),
+            sd.ebc_score = sd(ebc_score, na.rm = TRUE),
+            income = last(income)) %>%
+  ggplot(aes(x = mean.ebc_score, y = income, fill = income)) +
+  geom_boxplot() +
+  stat_summary(fun.x=mean, geom="point", shape=1, size=5, color="black") +
+  theme(legend.position="none") +
+  labs(y = NULL, x = "Mean efficiency scores by country") +
+  scale_fill_manual(values = palette_imf) +
+  imf_theme()
+
+# Arranging Multiple Plots
+(((temp1/temp2)) + plot_layout(guides="collect") + plot_annotation(
+  caption = 'Source: Author calculation', title = "Figure 4 Monte Carlo DEA scores",
+  tag_levels =  c('A'), tag_sep = '.', tag_suffix = ':',
+  theme = theme(plot.title = element_text(size = 12), legend.position="bottom",
+                plot.caption = element_text(size = 9.5))))
+ggsave("./fig04.png", height = 18, width = 25, units = "cm")
+remove(temp1, temp2)
+```
+
+
+
+```{r}
+temp1 <- func_hist_dea(dea_result, option = "ebc_score","USA")
+temp2 <- func_hist_dea(dea_result, option = "ebc_score","JPN")
+temp3 <- func_hist_dea(dea_result, option = "ebc_score","NOR")
+temp4 <- func_hist_dea(dea_result, option = "ebc_score","SGP")
+# Arranging Multiple Plots
+(((temp1/temp2)|(temp3/temp4)) + plot_layout(guides="collect") + plot_annotation(
+  caption = 'Source: Author calculation', title = "Monte Carlo DEA scores",
+  tag_levels =  c('a'), tag_prefix = 'Fig. ', tag_sep = '.', tag_suffix = ':',
+  theme = theme(plot.title = element_text(size = 12), legend.position="bottom",
+                plot.caption = element_text(size = 9.5))))
+# ggsave("./fig02.png", height = 10, width = 25, units = "cm")
+remove(temp1, temp2, temp3, temp4)
+```
+
+
+
+```{r, fig.width=10,fig.height=5}
+func_hist_dea_2(dea_result, option = "ebc_score",c("USA","NOR","JPN","SGP","GBR","DEU")) +
+  labs(caption = 'Source: Author calculation', title = "Figure 5 Distribution of Monte Carlo DEA scores for select Advanced Economies")
+ggsave("./fig05.png", height = 10, width = 25, units = "cm")
+func_hist_dea_2(dea_result, option = "ebc_score",c("BRA","EGY","SWZ","MYS","PHL","LKA")) +
+  labs(caption = 'Source: Author calculation', title = "Figure 6 Distribution of Monte Carlo DEA scores for select Emerging Market Economies")
+ggsave("./fig06.png", height = 10, width = 25, units = "cm")
+func_hist_dea_2(dea_result, option = "ebc_score",c("AFG","BGD","BFA","BDI","GMB","MDG")) +
+  labs(caption = 'Source: Author calculation', title = "Figure 7 Distribution of Monte Carlo DEA scores for select Low Income Economies")
+ggsave("./fig07.png", height = 10, width = 25, units = "cm")
+# remove(temp1, temp2, temp3, temp4)
+```
+
+
+ˆ
+```{r}
+dea_result %>% dplyr::filter(isocode == "MDG") %>% dplyr::summarise(mean = mean(ebc_score))
+```
+
+## Results & Brief Discussion
+
+
+
+
+Plotted against absolute spending, Fig. 9a shows that in general, higher government spending per student is correlated with higher efficiency. However the relationship is clearly non-linear and depicts diminishing marginal returns to spending. On the other hand, Fig. 9b indicates a weak negative relationship between efficiency and spending as a percentage of GDP per capita.
+
+```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
+# temp1 <- dea_result %>%
+#   ggplot(aes(y = (ebc_score),
+#              x = seceduexp_s1,
+#              color = income)) +
+#   geom_smooth(method = "lm", se=FALSE, colour = "#3d3f42", linetype = "dashed", show.legend = TRUE) +
+#   geom_point(size = 1) +
+#   geom_text_repel(aes(label = isocode),colour = "#004c97", size = 2, force = 0.1) +
+#   labs(y = "DEA Score (Bootstrap)",
+#         x = "Mean Government expenditure per student, secondary", title = "Fig. 9a")  +
+#   scale_colour_manual(values = palette_imf) +
+#   imf_theme()
+# 
+# temp2 <- dea_result %>%
+#   ggplot(aes(y = (ebc_score),
+#              x = seceduexp_gdppc,
+#              color = income)) +
+#   geom_smooth(method = "lm", se=FALSE, colour = "#3d3f42", linetype = "dashed", show.legend = TRUE) +
+#   geom_point(size = 1) +
+#   geom_text_repel(aes(label = isocode),colour = "#004c97", size = 2, force = 0.1) +
+#   labs(y = "DEA Score (Bootstrap)",
+#         x = "Mean Government expenditure per student, secondary", title = "Fig. 9b")  +
+#   scale_colour_manual(values = palette_imf) +
+#   imf_theme()
+# 
+# #Arranging Multiple Plots in Columns - 2 in 1
+# ((temp1|temp2) + plot_layout(guides="collect" ) + plot_annotation(
+#   caption = "Source: World Bank, World Development Indicators, Author's Calculation",
+#   theme = theme(plot.title = element_text(size = 12),
+#                 plot.caption = element_text(size = 9.5))))
+# ggsave("./fig09.png", height = 10, width = 25, units = "cm")
+# # Remove/drop old variables
+# remove(temp, temp1, temp2)
+```
+
+
+
+```{r, message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
+# # Merge original variables in
+# temp <- dea_result %>%
+#   mutate(savings = seceduexp_s1 * (1 - ebc_score), #seceduc_pupil * (1 - ebc_score),
+#          savings_gdppc = (savings / gdp_ppp_p1) * 100)
+# 
+# temp %>% group_by(income) %>% dplyr::summarise(mean=mean(savings_gdppc, na.rm = TRUE))
+# temp %>% group_by(income) %>% dplyr::summarise(mean=mean(ebc_score, na.rm = TRUE))
+# 
+# temp1 <- temp %>% dplyr::filter(income == "Advanced Economies") %>%
+#   ggplot(aes(y = (savings_gdppc),
+#              x = reorder(isocode, -savings_gdppc))) + geom_col(fill = IMFblue) +
+#   labs(y = "",x = "Advanced Economies") + imf_theme() +
+#   theme(axis.text.x = element_text(size = 8, angle = 45))
+# temp2 <- temp %>% dplyr::filter(income == "Emerging Market Economies") %>%
+#   ggplot(aes(y = (savings_gdppc),
+#              x = reorder(isocode, -savings_gdppc))) + geom_col(fill = IMFred) +
+#   labs(y = "Savings, as percent of GDP per capita (DEA)",
+#         x = "Emerging Market Economies") + imf_theme() +
+#   theme(axis.text.x = element_text(size = 7, angle = 45))
+# temp3 <- temp %>% dplyr::filter(income == "Low Income Developing Countries") %>%
+#   ggplot(aes(y = (savings_gdppc),
+#              x = reorder(isocode, -savings_gdppc))) + geom_col(fill = IMFyellow) +
+#   labs(y = "",x = "Low Income Developing Countries") + imf_theme() +
+#   theme(axis.text.x = element_text(size = 8, angle = 45))
+# 
+# #Arranging Multiple Plots in Columns - 2 in 1
+# ((temp1/temp2/temp3) + plot_layout(guides="collect") + plot_annotation('Fig. 10 Illustrative savings from inefficiency', caption = "Source: Author's Calculation",
+#   theme = theme(plot.title = element_text(size = 12),
+#                 plot.caption = element_text(size = 9.5))))
+# 
+# ggsave("./fig10.png", height = 25, width = 20, units = "cm")
+# 
+# # Remove/drop old variables
+# remove(temp, temp1, temp2, temp3)
+```
+
+
+
+In particular, LIDCs have average potential gains of 14.41% of GDP per capita, compared to 6.0% for AEs and 6.17% for EMEs.
+In Fig. 11a, I plot the efficiency scores against the World Bank's Government Effectiveness estimate. The charts shows that there is a positive relationship between spending efficiency and government effectiveness. This is to be expected given stronger government institutions are important in raising spending efficiency.
+
+
+
+
+
+In any case, it may be prudent to perceive efficiency scores of certain countries with low statistical capacity scores with extra scrutiny. As an example, I added a red vertical line to show the threshold for capacity scores of 60. Estimates for countries below this threshold, including Afghanistan (AFG), Marshall Islands (MHL), Burundi (BDI), may have particularly inaccurate estimates.
+
+\newpage
+
+
+
+
+
+
+# Section III: Socio-economic factors 
+
+
+
+
+
+```{r}
+# dea_result %>%
+#   ggplot(aes(y = (ebc_score),
+#              x = govt_eff,
+#              color = income,
+#              label = isocode)) +
+#   geom_smooth(method = "lm", se=FALSE, colour = "#3d3f42", linetype = "dashed", show.legend = TRUE) +
+#   geom_point(size = 1) +
+#   geom_text_repel(colour = "#004c97", size = 2, force = 0.1) +
+#   scale_colour_manual(values = palette_imf) +
+#   imf_theme()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Appendix
+## Bibliography
+- https://data.worldbank.org/
+- [RDocumentation: Data from the World Bank API](https://www.rdocumentation.org/packages/wbstats/versions/0.2/topics/wb)
+- [Introduction to the wbstats R-package](https://cran.r-project.org/web/packages/wbstats/vignettes/Using_the_wbstats_package.html)
+- [Santos, Jorge & Negas, Elsa & Cavique, Luis. (2013). Introduction to Data Envelopment Analysis. 10.1007/978-94-007-5739-4_3.](https://www.researchgate.net/publication/278723533_Introduction_to_Data_Envelopment_Analysis)
+- [THE EFFECTS OF SCHOOL SPENDING ON EDUCATIONAL AND ECONOMIC OUTCOMES: EVIDENCE FROM SCHOOL FINANCE REFORMS-](https://gsppi.berkeley.edu/~ruckerj/QJE_resubmit_final_version.pdf)
+- Chetty, Raj, John N. Friedman, Nathaniel Hilger, Emmanuel Saez, Diane Whitmore Schanzenbach, and Danny Yagan, ‘‘How Does Your Kindergarten Classroom Affect Your Earnings? Evidence from Project Star,’’ Quarterly Journal of Economics, 126 (2011), 1593–1660
+- https://dplyr.tidyverse.org/reference/across.html
+- https://cran.r-project.org/web/packages/Benchmarking/Benchmarking.pdf k
+- https://rdrr.io/cran/Benchmarking/man/dea.boot.html
+- https://www.imf.org/en/Publications/WP/Issues/2016/12/31/A-Hybrid-Approach-to-Estimating-the-Efficiency-of-Public-Spending-on-Education-in-Emerging-41293
+- https://patchwork.data-imaginist.com/articles/guides/annotation.html
+- Kittelsen, Sverre A. C. (1999) : Monte Carlo simulations of DEA efficiency measures and hypothesis tests, Memorandum, No. 1999,09, University of Oslo, Department of Economics, Oslo
+
+## Misc.
+```{r , message=FALSE, error=FALSE, warning=FALSE, include=TRUE}
+################################################################
+# Print packages used #
+################################################################
+installed.packages()[names(sessionInfo()$otherPkgs), "Version"]
+``` 
+
+
+HD.HCI.OVRL	Health Nutrition Population	Human capital index (HCI) (scale 0-1)		The HCI calculates the contributions of health and education to worker productivity. The final index score ranges from zero to one and measures the productivity as a future worker of child born today relative to the benchmark of full health and complete education.
+HD.HCI.OVRL.LB	Health Nutrition Population	Human capital index (HCI), lower bound (scale 0-1)		The HCI lower bound reflects uncertainty in the measurement of the components and the overall index. It is obtained by recalculating the HCI using estimates of the lower bounds of each of the components of the HCI. The range between the upper and lower bound is the uncertainty interval. While the uncertainty intervals constructed here do not have a rigorous statistical interpretation, a rule of thumb is that if for two countries they overlap substantially, the differences between their HCI values are not likely to be practically meaningful.
+HD.HCI.OVRL.UB	Health Nutrition Population	Human capital index (HCI), upper bound (scale 0-1)		The HCI upper bound reflects uncertainty in the measurement of the components and the overall index. It is obtained by recalculating the HCI using estimates of the upper bounds of each of the components of the HCI. The range between the upper and lower bound is the uncertainty interval. While the uncertainty intervals constructed here do not have a rigorous statistical interpretation, a rule of thumb is that if for two countries they overlap substantially, the differences between their HCI values are not likely to be practically meaningful.
+
+Spending
+SE.XPD.TOTL.GD.ZS	Health Nutrition Population	Government expenditure on education, total (% of GDP)		General government expenditure on education (current, capital, and transfers) is expressed as a percentage of GDP. It includes expenditure funded by transfers from international sources to government. General government usually refers to local, regional and central governments.
+SH.XPD.GHED.GD.ZS	World Development Indicators	Domestic general government health expenditure (% of GDP)		Public expenditure on health from domestic sources as a share of the economy as measured by GDP.
+SH.XPD.PVTD.PP.CD	World Development Indicators	Domestic private health expenditure per capita, PPP (current international $)		Current private expenditures on health per capita expressed in international dollars at purchasing power parity.
+SH.XPD.EHEX.PP.CD	World Development Indicators	External health expenditure per capita, PPP (current international $)		Current external expenditures on health per capita expressed in international dollars at purchasing power parity. External sources are composed of direct foreign transfers and foreign transfers distributed by government encompassing all financial inflows into the national health system from outside the country.
+NY.GDP.PCAP.PP.KD	Sustainable Development Goals (SDGs)	GDP per capita, PPP (constant 2017 international $)		GDP per capita based on purchasing power parity (PPP). PPP GDP is gross domestic product converted to international dollars using purchasing power parity rates. An international dollar has the same purchasing power over GDP as the U.S. dollar has in the United States. GDP at purchaser's prices is the sum of gross value added by all resident producers in the country plus any product taxes and minus any subsidies not included in the value of the products. It is calculated without making deductions for depreciation of fabricated assets or for depletion and degradation of natural resources. Data are in constant 2017 international dollars.
+NY.GDP.PCAP.PP.CD	World Development Indicators	GDP per capita, PPP (current international $)		"This indicator provides per capita values for gross domestic product (GDP) expressed in current international dollars converted by purchasing power parity (PPP) conversion factor. GDP is the sum of gross value added by all resident producers in the country plus any product taxes and minus any subsidies not included in the value of the products. conversion factor is a spatial price deflator and currency converter that controls for price level differences between countries. Total population is a mid-year population based on the de facto definition of population, which counts all residents regardless of legal status or citizenship."
+
+
+
