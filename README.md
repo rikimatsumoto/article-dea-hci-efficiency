@@ -11,7 +11,7 @@ The methodology involves:
 3. Aggregating results to obtain robust efficiency estimates.
 
 ## Features
-- **Bootstrap resampling **: Resamples dataset to model uncertainty in estimated statistics of input-output relationships.
+- **Bootstrap re-sampling**: Resamples dataset to model uncertainty in estimated statistics of input-output relationships.
 - **Data Envelopment Analysis (DEA)**: Evaluates the efficiency of decision-making units (DMUs).
 - **Benchmarking Human Capital Efficiency**: Focuses on public spending in education and health, benchmarking countries’ performance.
 - **Visualization**: Provides plots to illustrate efficiency scores and variability across simulations.
